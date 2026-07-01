@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Benchmark outputs (keep example results if needed)
+results/*.csv
+results/*.json
+!results/.gitkeep
+
+# Profiling / temp
+*.log
+/tmp/
+.hip_cache/

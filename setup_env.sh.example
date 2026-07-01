@@ -1,0 +1,20 @@
+#!/bin/bash
+# Copy to setup_env.sh and adjust paths for your machine.
+#
+#   cp setup_env.sh.example setup_env.sh
+#   source setup_env.sh
+
+export PYTORCH_ROCM_ARCH="${PYTORCH_ROCM_ARCH:-gfx942}"
+export SGLANG_USE_AITER="${SGLANG_USE_AITER:-1}"
+export TORCHDYNAMO_DISABLE=1
+export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
+
+# Required: ROCm PyTorch venv
+# export VENV_PYTHON=/root/venvs/rocm-torch/bin/python
+
+# Required: dependency repos (clone separately)
+export AITER_PATH="${AITER_PATH:-/root/repos/aiter}"
+export SGLANG_PATH="${SGLANG_PATH:-/root/repos/sglang/python}"
+
+# Optional: your machine env script
+# source /mnt/public/qinhaiyan/env.sh
