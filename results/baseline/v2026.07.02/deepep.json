@@ -1,0 +1,72 @@
+[
+  {
+    "benchmark": "deepep",
+    "backend": "torch.distributed all_to_all",
+    "scenario": "balanced",
+    "rank": 0,
+    "world_size": 4,
+    "num_tokens": 512,
+    "recv_tokens": 1024,
+    "layout_ms": 0.07446710405678585,
+    "dispatch_ms": 0.5041962409841604,
+    "combine_ms": 0.5043302774429321,
+    "total_ms": 1.0829936224838783,
+    "status": "OK"
+  },
+  {
+    "benchmark": "deepep",
+    "backend": "torch.distributed all_to_all",
+    "scenario": "balanced",
+    "rank": 0,
+    "world_size": 4,
+    "num_tokens": 1024,
+    "recv_tokens": 2048,
+    "layout_ms": 0.15837196568990575,
+    "dispatch_ms": 0.7955613465144716,
+    "combine_ms": 0.791125720944898,
+    "total_ms": 1.7450590331492755,
+    "status": "OK"
+  },
+  {
+    "benchmark": "deepep",
+    "backend": "torch.distributed all_to_all",
+    "scenario": "balanced",
+    "rank": 0,
+    "world_size": 4,
+    "num_tokens": 2048,
+    "recv_tokens": 4096,
+    "layout_ms": 0.17707706885091193,
+    "dispatch_ms": 1.8058808959763624,
+    "combine_ms": 1.3383403482108285,
+    "total_ms": 3.3212983130381026,
+    "status": "OK"
+  },
+  {
+    "benchmark": "deepep",
+    "backend": "torch.distributed all_to_all",
+    "scenario": "balanced",
+    "rank": 0,
+    "world_size": 4,
+    "num_tokens": 4096,
+    "recv_tokens": 8192,
+    "layout_ms": 0.09370141347934462,
+    "dispatch_ms": 2.4471758151876513,
+    "combine_ms": 2.4331271730620285,
+    "total_ms": 4.974004401729024,
+    "status": "OK"
+  },
+  {
+    "benchmark": "deepep",
+    "backend": "torch.distributed all_to_all",
+    "scenario": "balanced",
+    "rank": 0,
+    "world_size": 4,
+    "num_tokens": 8192,
+    "recv_tokens": 16384,
+    "layout_ms": 0.09649324108814371,
+    "dispatch_ms": 4.612708502802357,
+    "combine_ms": 5.03370033461472,
+    "total_ms": 9.742902078505221,
+    "status": "OK"
+  }
+]

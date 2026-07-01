@@ -88,3 +88,55 @@ python compare_results.py --max-regression 2.0 --baseline ... --current ...
 ```
 
 完整原始数据见 `v2026.07.01/decode.json`、`prefill.json` 及对应 CSV。
+
+---
+
+# Baseline v2026.07.02 — 专项算子（上游 llm_flops 脚本 3–7）
+
+> 录制时间：2026-07-01  
+> 扩展 v2026.07.01，补齐 projection / indexer / moe / flashmla / deepep
+
+## 统计（全部 OK）
+
+| 脚本 | 项数 | 后端 |
+|------|------|------|
+| `dsa_projection.py` | 24/24 | AITER FP8 + torch.bmm |
+| `dsa_indexer.py` | 48/48 | AITER FP8（含 **index_score**） |
+| `moe_deepgemm.py` | 15/15 | per-expert AITER grouped |
+| `dsa_flashmla.py` | 10/10 | PyTorch sparse gather |
+| `bench_glm5_deepep.py` | 5/5 | torch.distributed all_to_all (4 GPU) |
+
+## 扫参
+
+| 脚本 | 关键参数 |
+|------|----------|
+| projection | M = 1024, 4096, 16384, 65536 |
+| indexer | M = 16,256,512,1024 × S = 65536, 131072, 262144 |
+| moe | 128 tokens, 5 随机分布 × gate/up/down |
+| flashmla | total_len=**16384**（上游 65536；AMD PyTorch fallback），hit 0–90% |
+| deepep | 4×GPU, balanced, M/GPU = 512–8192 |
+
+## 亮点数字
+
+**projection o_proj @ M=65536**：~24.8 ms（AITER）
+
+**indexer index_score @ M=1024, S=65536**：~2.0 ms（全 head GEMM）
+
+**moe gate_proj dist0**：~0.18 ms @ 128 tokens
+
+**flashmla hit=0%**：~48.7 ms @ s_q=16384（PyTorch；非 FlashMLA）
+
+**deepep balanced M=8192/GPU**：total ~9.7 ms（layout+dispatch+combine）
+
+## 验收
+
+```bash
+python dsa_indexer.py
+python compare_results.py \
+  --baseline results/baseline/v2026.07.02 \
+  --current results/glm5_dsa_indexer_amd_YYYYMMDD.json
+
+torchrun --nproc_per_node=4 bench_glm5_deepep.py --scenario balanced
+```
+
+原始数据：`v2026.07.02/*.json`

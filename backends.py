@@ -161,3 +161,38 @@ def bench_moe_dense_triple(m_tokens: int, device: torch.device) -> Tuple[float, 
         bench_fp8_gemm(m_tokens, HIDDEN_DIM, MOE_INTERMEDIATE_SIZE, device),
         bench_fp8_gemm(m_tokens, MOE_INTERMEDIATE_SIZE, HIDDEN_DIM, device),
     )
+
+
+def bench_moe_grouped_aiter(
+    m_per_expert: list,
+    k: int,
+    n: int,
+    device: torch.device,
+) -> Tuple[float, int]:
+    """Grouped MoE GEMM via per-expert AITER FP8 slices (ROCm analogue to DeepGEMM grouped)."""
+    gemm_fn, _ = pick_fp8_gemm()
+    alignment = 128
+    aligned_m = [(((m + alignment - 1) // alignment) * alignment) if m > 0 else 0 for m in m_per_expert]
+    total_m = sum(aligned_m)
+
+    xs = []
+    ws = []
+    for m in aligned_m:
+        if m <= 0:
+            xs.append(None)
+            ws.append(None)
+            continue
+        x = torch.randn(m, k, dtype=torch.bfloat16, device=device)
+        _, w_fp8, w_scale = prepare_sglang_fp8_weight(n, k, device=device)
+        xs.append(x)
+        ws.append((w_fp8, w_scale))
+
+    def run():
+        for x, w in zip(xs, ws):
+            if x is None:
+                continue
+            w_fp8, w_scale = w
+            gemm_fn(x, w_fp8, BLOCK_SIZE_GEMM, w_scale, input_scale=None, bias=None)
+
+    avg_ms = cuda_graph_bench(run)
+    return avg_ms, total_m

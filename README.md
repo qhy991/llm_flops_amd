@@ -11,11 +11,11 @@ GLM-5 算子性能测试工具集 — **AMD MI300X (gfx942 / ROCm)** 版。
 |------------------|-------------------------|------|
 | `bench_glm5_decode.py` | `bench_glm5_decode.py` | ✅ |
 | `bench_glm5_prefill.py` | `bench_glm5_prefill.py` | ✅ |
-| `dsa_projection.py` | 合并在 unified bench 的 Attention GEMM | 部分 |
-| `dsa_indexer.py` | 合并在 unified bench 的 Indexer 段 | 部分 |
-| `dsa_flashmla.py` | PyTorch MLA fallback | 近似 |
-| `moe_deepgemm.py` | 3× dense AITER GEMM | 近似 |
-| `bench_glm5_deepep.py` | 未包含（多卡 EP） | ❌ |
+| `bench_glm5_deepep.py` | `bench_glm5_deepep.py` | ✅ torch.distributed |
+| `dsa_flashmla.py` | `dsa_flashmla.py` | ✅ PyTorch sparse |
+| `dsa_indexer.py` | `dsa_indexer.py` | ✅ 含 index_score |
+| `dsa_projection.py` | `dsa_projection.py` | ✅ |
+| `moe_deepgemm.py` | `moe_deepgemm.py` | ✅ AITER grouped |
 
 ### gfx942 后端映射
 
@@ -52,11 +52,22 @@ python run_all.py --quick
 # 3. 全量 decode 扫表（默认 M=1,4,8,16,32  S=2048,8192）
 python bench_glm5_decode.py
 
-# 4. 全量 prefill 扫表（默认 M=1024,2048,4096  S=2048,8192）
+# 3. 全量 prefill 扫表（默认 M=1024,2048,4096  S=2048,8192）
 python bench_glm5_prefill.py
 
-# 5. 一次跑 decode + prefill
+# 4. 专项算子 benchmark（对应上游 llm_flops 脚本 3-7）
+python dsa_projection.py          # Attention GEMM/BMM 大 M 扫参
+python dsa_indexer.py             # DSA Indexer 含 index_score
+python moe_deepgemm.py            # MoE grouped GEMM + 随机分布
+python dsa_flashmla.py            # Sparse MLA vs KV 命中率
+
+# 5. MoE EP 通信（需多卡 torchrun；DeepEP 不可用，用 all_to_all 替代）
+torchrun --nproc_per_node=4 bench_glm5_deepep.py --scenario balanced
+
+# 6. 一次跑全部
 python run_all.py
+python run_all.py --suite specialized   # 仅专项 4 项
+python run_all.py --suite deepep        # 仅 EP 通信
 ```
 
 ### 环境变量
@@ -80,28 +91,29 @@ python run_all.py
 
 ## 验收基线 (Acceptance Baseline)
 
-当前冻结版本：**`v2026.07.01`**（见 [`results/baseline/`](results/baseline/)）
+| 版本 | 内容 | 路径 |
+|------|------|------|
+| **v2026.07.01** | decode + prefill unified layer-sum | `results/baseline/v2026.07.01/` |
+| **v2026.07.02** | 专项 5 脚本（projection/indexer/moe/flashmla/deepep） | `results/baseline/v2026.07.02/` |
 
-| 层级 | 内容 | 基线位置 |
-|------|------|----------|
-| **L1 算子** | decode + prefill 全扫参 | `results/baseline/v2026.07.01/` |
-| **L2 E2E** | TP=4 整模型 decode（sglang-exp） | 另行记录在 dense-fp8-gemm 任务 |
-
-### L1 快速对比
+### L1 对比
 
 ```bash
-python run_all.py   # 或分别跑 decode / prefill
-
+# unified decode/prefill
 python compare_results.py \
   --baseline results/baseline/v2026.07.01 \
-  --current results/glm5_decode_amd_YYYYMMDD_HHMMSS.json
+  --current results/glm5_decode_amd_YYYYMMDD.json
+
+# 专项算子（目录内所有 json）
+python compare_results.py \
+  --baseline results/baseline/v2026.07.02 \
+  --current results/glm5_dsa_indexer_amd_YYYYMMDD.json
 ```
 
-- 默认：单算子相对基线变慢 **>5%** → `REGRESS`（exit 1）
 - 人类可读摘要：[`results/baseline/BASELINE.md`](results/baseline/BASELINE.md)
-- 机器可读元数据：[`results/baseline/v2026.07.01/manifest.json`](results/baseline/v2026.07.01/manifest.json)
+- v2026.07.02 统计：**projection 24/24 · indexer 48/48 · moe 15/15 · flashmla 10/10 · deepep 5/5** 全部 OK
 
-### v2026.07.01 要点
+### v2026.07.01 要点（unified）
 
 - **Decode BS=1**：layer-sum ≈ **0.20 ms**；`o_proj` + `mla_decode_attn` 居前
 - **Decode BS≥4**：`mla_decode_attn` 占 50%→85%

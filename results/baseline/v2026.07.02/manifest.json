@@ -1,0 +1,90 @@
+{
+  "baseline_id": "v2026.07.02",
+  "recorded_at": "2026-07-01T03:09:37Z",
+  "description": "Specialized operator baselines (upstream llm_flops scripts 3-7) on gfx942",
+  "extends": "v2026.07.01",
+  "hardware": {
+    "gpu": "AMD MI300X",
+    "arch": "gfx942",
+    "gpu_count": 4
+  },
+  "software": {
+    "torch": "2.10.0+rocm7.0",
+    "aiter_commit": "6d0304e8c",
+    "sglang_commit": "85fd900"
+  },
+  "scripts": {
+    "dsa_projection.py": {
+      "M": [
+        1024,
+        4096,
+        16384,
+        65536
+      ],
+      "backend": "aiter FP8 GEMM + torch.bmm"
+    },
+    "dsa_indexer.py": {
+      "M": [
+        16,
+        256,
+        512,
+        1024
+      ],
+      "S": [
+        65536,
+        131072,
+        262144
+      ],
+      "backend": "aiter FP8 + torch bf16"
+    },
+    "moe_deepgemm.py": {
+      "total_tokens": 128,
+      "distributions": 5,
+      "backend": "per-expert AITER grouped"
+    },
+    "dsa_flashmla.py": {
+      "total_len": 16384,
+      "note": "upstream 65536 FlashMLA; AMD PyTorch sparse gather",
+      "hit_rates": "0-90%"
+    },
+    "bench_glm5_deepep.py": {
+      "world_size": 4,
+      "scenario": "balanced",
+      "backend": "torch.distributed all_to_all (DeepEP N/A)"
+    }
+  },
+  "stats": {
+    "projection": {
+      "total": 24,
+      "ok": 24,
+      "fail": 0
+    },
+    "indexer": {
+      "total": 48,
+      "ok": 48,
+      "fail": 0
+    },
+    "moe_deepgemm": {
+      "total": 15,
+      "ok": 15,
+      "fail": 0
+    },
+    "flashmla": {
+      "total": 10,
+      "ok": 10,
+      "fail": 0
+    },
+    "deepep": {
+      "total": 5,
+      "ok": 5,
+      "fail": 0
+    }
+  },
+  "artifacts": {
+    "projection": "v2026.07.02/projection.json",
+    "indexer": "v2026.07.02/indexer.json",
+    "moe_deepgemm": "v2026.07.02/moe_deepgemm.json",
+    "flashmla": "v2026.07.02/flashmla.json",
+    "deepep": "v2026.07.02/deepep.json"
+  }
+}

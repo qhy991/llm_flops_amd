@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def load_rows(path: Path) -> List[dict]:
@@ -14,13 +14,34 @@ def load_rows(path: Path) -> List[dict]:
         return json.load(f)
 
 
+def row_key(r: dict) -> Tuple:
+    bench = r.get("benchmark", r.get("phase", ""))
+    if bench == "dsa_projection" or r.get("phase") in ("decode", "prefill"):
+        if "phase" in r:
+            return (r["phase"], r["name"], r["M"], r.get("S", 0))
+        return (bench, r["name"], r["M"], 0)
+    if bench == "dsa_indexer":
+        return (bench, r["name"], r["M"], r["S"])
+    if bench == "moe_deepgemm":
+        return (bench, r["proj"], r["dist_idx"], r.get("K", 0), r.get("N", 0))
+    if bench == "dsa_flashmla":
+        return (bench, r["hit_rate"], r.get("s_q", 0), r.get("s_kv", 0))
+    if bench == "deepep":
+        return (bench, r["scenario"], r.get("rank", 0), r.get("num_tokens", 0))
+    return (bench, r.get("name", ""), r.get("M", 0), r.get("S", 0))
+
+
 def index_rows(rows: List[dict]) -> Dict[Tuple, dict]:
     out = {}
     for r in rows:
-        if r.get("status") != "OK":
+        if r.get("status") not in (None, "OK"):
+            if r.get("status") == "FAIL" or r.get("avg_ms", 1) == 0 and r.get("error"):
+                continue
+        if r.get("status") == "FAIL":
             continue
-        key = (r.get("phase", ""), r["name"], r["M"], r["S"])
-        out[key] = r
+        if "avg_ms" in r and r["avg_ms"] <= 0 and r.get("error"):
+            continue
+        out[row_key(r)] = r
     return out
 
 
@@ -28,24 +49,25 @@ def compare(baseline: Dict[Tuple, dict], current: Dict[Tuple, dict], max_regress
     keys = sorted(set(baseline) | set(current))
     improved = regressed = missing = new = 0
 
-    print(f"{'phase':<8} {'name':<22} {'M':>4} {'S':>6} {'base_ms':>10} {'curr_ms':>10} {'chg':>8} {'status':>10}")
-    print("-" * 90)
+    print(f"{'key':<50} {'base_ms':>10} {'curr_ms':>10} {'chg':>8} {'status':>10}")
+    print("-" * 95)
 
     for key in keys:
-        phase, name, m, s = key
         b = baseline.get(key)
         c = current.get(key)
+        key_str = str(key)[:50]
         if b and not c:
             missing += 1
-            print(f"{phase:<8} {name:<22} {m:>4} {s:>6} {'—':>10} {'—':>10} {'—':>8} {'MISSING':>10}")
+            print(f"{key_str:<50} {'—':>10} {'—':>10} {'—':>8} {'MISSING':>10}")
             continue
         if c and not b:
             new += 1
-            print(f"{phase:<8} {name:<22} {m:>4} {s:>6} {'—':>10} {c['avg_ms']:>10.4f} {'—':>8} {'NEW':>10}")
+            cms = c.get("avg_ms", c.get("total_ms", 0))
+            print(f"{key_str:<50} {'—':>10} {cms:>10.4f} {'—':>8} {'NEW':>10}")
             continue
 
-        bms = b["avg_ms"]
-        cms = c["avg_ms"]
+        bms = b.get("avg_ms", b.get("total_ms", 0))
+        cms = c.get("avg_ms", c.get("total_ms", 0))
         if bms <= 0:
             chg = 0.0
         else:
@@ -58,11 +80,9 @@ def compare(baseline: Dict[Tuple, dict], current: Dict[Tuple, dict], max_regress
             regressed += 1
         else:
             status = "OK"
-        print(
-            f"{phase:<8} {name:<22} {m:>4} {s:>6} {bms:>10.4f} {cms:>10.4f} {chg:>+7.1f}% {status:>10}"
-        )
+        print(f"{key_str:<50} {bms:>10.4f} {cms:>10.4f} {chg:>+7.1f}% {status:>10}")
 
-    print("-" * 90)
+    print("-" * 95)
     print(
         f"Summary: improved={improved} regressed={regressed} "
         f"within_tol={len(keys)-improved-regressed-missing-new} missing={missing} new={new}"
@@ -70,47 +90,30 @@ def compare(baseline: Dict[Tuple, dict], current: Dict[Tuple, dict], max_regress
     return 1 if regressed else 0
 
 
+def load_baseline_dir(base_path: Path) -> List[dict]:
+    rows: List[dict] = []
+    if base_path.is_dir():
+        for name in sorted(base_path.iterdir()):
+            if name.suffix == ".json" and name.name != "manifest.json":
+                rows.extend(load_rows(name))
+        return rows
+    return load_rows(base_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare benchmark JSON to baseline")
     parser.add_argument(
         "--baseline",
-        default="results/baseline/v2026.07.01/decode.json",
-        help="Baseline JSON (or directory with decode.json + prefill.json)",
+        default="results/baseline/v2026.07.01",
+        help="Baseline JSON file or directory",
     )
-    parser.add_argument("--current", required=True, help="Current run JSON")
-    parser.add_argument(
-        "--max-regression",
-        type=float,
-        default=5.0,
-        help="Max allowed slowdown %% per op before FAIL (default 5%%)",
-    )
+    parser.add_argument("--current", required=True, help="Current run JSON or directory")
+    parser.add_argument("--max-regression", type=float, default=5.0)
     args = parser.parse_args()
 
-    base_path = Path(args.baseline)
+    base_rows = load_baseline_dir(Path(args.baseline))
     curr_path = Path(args.current)
-
-    base_rows: List[dict] = []
-    if base_path.is_dir():
-        for name in ("decode.json", "prefill.json"):
-            p = base_path / name
-            if p.exists():
-                base_rows.extend(load_rows(p))
-    else:
-        base_rows = load_rows(base_path)
-        parent = base_path.parent / "prefill.json"
-        if parent.exists() and base_path.name == "decode.json":
-            base_rows.extend(load_rows(parent))
-
-    curr_rows = load_rows(curr_path)
-    if curr_path.parent.joinpath("prefill.json").exists() and "prefill" not in curr_path.name:
-        pass
-    # If current is only decode, user passes one file; if dir, merge
-    if curr_path.is_dir():
-        curr_rows = []
-        for name in ("decode.json", "prefill.json"):
-            p = curr_path / name
-            if p.exists():
-                curr_rows.extend(load_rows(p))
+    curr_rows = load_baseline_dir(curr_path) if curr_path.is_dir() else load_rows(curr_path)
 
     rc = compare(index_rows(base_rows), index_rows(curr_rows), args.max_regression)
     sys.exit(rc)
