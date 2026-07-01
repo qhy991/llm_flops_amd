@@ -91,11 +91,8 @@ python run_all.py
 ## 推送到 GitHub
 
 ```bash
-cd /root/glm5-flops-amd
-git init
-git add .
-git commit -m "Initial AMD gfx942 GLM-5 operator benchmarks"
-git remote add origin https://github.com/<user>/glm5-flops-amd.git
+cd llm_flops_amd
+git remote add origin https://github.com/qhy991/llm_flops_amd.git
 git push -u origin main
 ```
 
