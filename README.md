@@ -78,15 +78,34 @@ python run_all.py
 
 终端会打印按 `avg_ms` 降序的 **瓶颈 Top-5** 与 **layer-sum**。
 
-## 已知 AMD 实测结论（参考）
+## 验收基线 (Acceptance Baseline)
 
-**Decode BS=1, S=2048**（layer-sum ≈ 0.20 ms）：
+当前冻结版本：**`v2026.07.01`**（见 [`results/baseline/`](results/baseline/)）
 
-1. `o_proj` ~0.044 ms
-2. `mla_decode_attn` ~0.035 ms
-3. GEMM/MoE ~0.02 ms 量级
+| 层级 | 内容 | 基线位置 |
+|------|------|----------|
+| **L1 算子** | decode + prefill 全扫参 | `results/baseline/v2026.07.01/` |
+| **L2 E2E** | TP=4 整模型 decode（sglang-exp） | 另行记录在 dense-fp8-gemm 任务 |
 
-**Decode BS≥4**：`mla_decode_attn`（PyTorch fallback）迅速成为瓶颈（50%→85%）。
+### L1 快速对比
+
+```bash
+python run_all.py   # 或分别跑 decode / prefill
+
+python compare_results.py \
+  --baseline results/baseline/v2026.07.01 \
+  --current results/glm5_decode_amd_YYYYMMDD_HHMMSS.json
+```
+
+- 默认：单算子相对基线变慢 **>5%** → `REGRESS`（exit 1）
+- 人类可读摘要：[`results/baseline/BASELINE.md`](results/baseline/BASELINE.md)
+- 机器可读元数据：[`results/baseline/v2026.07.01/manifest.json`](results/baseline/v2026.07.01/manifest.json)
+
+### v2026.07.01 要点
+
+- **Decode BS=1**：layer-sum ≈ **0.20 ms**；`o_proj` + `mla_decode_attn` 居前
+- **Decode BS≥4**：`mla_decode_attn` 占 50%→85%
+- **Prefill M=4096**：layer-sum ≈ **13.5 ms**；`mla_prefill_attn` ~59%
 
 ## 推送到 GitHub
 

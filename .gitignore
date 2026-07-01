@@ -6,9 +6,10 @@ __pycache__/
 .venv/
 venv/
 
-# Benchmark outputs (keep example results if needed)
+# Ad-hoc benchmark outputs (baseline is tracked under results/baseline/)
 results/*.csv
 results/*.json
+!results/baseline/**
 !results/.gitkeep
 
 # Profiling / temp
